@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shopping_list_app/data/categories.dart';
 import 'package:shopping_list_app/models/grocery_item.dart';
 import 'package:shopping_list_app/widgets/new_item.dart';
+import 'package:http/http.dart' as http;
 
 class GroceryList extends StatefulWidget {
   const GroceryList({super.key});
@@ -11,18 +15,57 @@ class GroceryList extends StatefulWidget {
 
 class _GroceryListState extends State<GroceryList> {
   final List<GroceryItem> _groceryItems = [];
+
+  var _isLoading = true;
+
+  @override
+  void initState() {
+    _loadItems();
+    super.initState();
+  }
+
+  void _loadItems() async {
+    final url = Uri.https(
+      'flutter-prep-cc67c-default-rtdb.asia-southeast1.firebasedatabase.app',
+      'shopping-list.json',
+    );
+
+    final response = await http.get(url);
+    final Map<String, dynamic> listData = json.decode(response.body);
+    final List<GroceryItem> loadedItems = [];
+
+    for (final item in listData.entries) {
+      final category = categories.entries
+          .firstWhere(
+            (catItem) => catItem.value.title == item.value['category'],
+          )
+          .value;
+      loadedItems.add(
+        GroceryItem(
+          id: item.key,
+          name: item.value['name'],
+          quantity: item.value['quantity'],
+          category: category,
+        ),
+      );
+    }
+    setState(() {
+      _groceryItems.addAll(loadedItems);
+      _isLoading = false;
+    });
+  }
+
   void _addItem() async {
-    final result = await Navigator.of(context).push<GroceryItem>(
+    final newItem = await Navigator.of(context).push<GroceryItem>(
       MaterialPageRoute(builder: (context) => const NewItem()),
     );
 
-    if (result != null) {
-      setState(() {
-        _groceryItems.add(result);
-      });
-    } else {
+    if (newItem == null) {
       return;
     }
+    setState(() {
+      _groceryItems.add(newItem);
+    });
   }
 
   _removeItem(GroceryItem item) {
@@ -39,6 +82,10 @@ class _GroceryListState extends State<GroceryList> {
         style: Theme.of(context).textTheme.bodyLarge,
       ),
     );
+
+    if (_isLoading) {
+      content = const Center(child: CircularProgressIndicator());
+    }
 
     if (_groceryItems.isNotEmpty) {
       content = ListView.builder(
